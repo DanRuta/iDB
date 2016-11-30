@@ -29,7 +29,7 @@ NOTE: Drop table is not implemented because in indexedDB, the only wayy to updat
 
 ### Queries
 | Function | Explanation | Parameters | Returns |
-|-- |:--: |:--: |:--: |
+| ------------- |:-------------:| :-----:|:-------: |
 | run | This function needs to be called at the end of the query building chain. It also clears the built up data (but not the database used) | | Promise |
 | select | Data to select. Leaving this empty will select all data | Any number of **string** parameters, **string arrays** and any combination of the two | iDB |
 | from | Specify the table to use for queries | **String** table name | iDB |
