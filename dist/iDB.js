@@ -4,6 +4,8 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
 
 var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
+function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 var iDB = function () {
@@ -117,6 +119,7 @@ var iDB = function () {
             }
 
             this.compileListFromArguments(args, "string").forEach(this.addColumn.bind(this));
+            return this;
         }
 
         // Operations
@@ -131,11 +134,53 @@ var iDB = function () {
                 args[_key2] = arguments[_key2];
             }
 
-            var selectKeysList = this.compileListFromArguments(args, "string");
+            var selectList = this.compileListFromArguments(args, "string");
 
-            if (selectKeysList && selectKeysList.length) this.selectKeys = selectKeysList;
+            if (selectList && selectList.length) this.selectList = selectList;
 
             this.operation = "select";
+            return this;
+        }
+    }, {
+        key: "functions",
+        value: function functions() {
+            var _this2 = this;
+
+            var functionList = [],
+                checkObjectValidity = function checkObjectValidity(object) {
+
+                if ((typeof object === "undefined" ? "undefined" : _typeof(object)) == "object" && object == Object(object)) {
+
+                    if (!object.hasOwnProperty("column")) _this2.throwError("No column name provided in object. It must be provided to the key 'column'");
+
+                    // Make sure the scalar functions provided are in an array
+                    if (object.hasOwnProperty("scalar")) {
+
+                        if (typeof object.scalar == "function") object.scalar = [object.scalar];else if (!Array.isArray(object.scalar) || object.scalar.some(function (object) {
+                            return typeof object != "function";
+                        })) _this2.throwError("Scalar value must be either a function or array of functions");
+                    }
+
+                    if (object.hasOwnProperty("aggregate") && typeof object.aggregate != "function") _this2.throwError("Aggregate value must be a function");
+                } else _this2.throwError("Functions must be provided in objects, along with their columns. Check the documentation for more info.");
+
+                functionList.push(object);
+            };
+
+            // Parse each item into an object readable by the rest of the library
+
+            for (var _len3 = arguments.length, args = Array(_len3), _key3 = 0; _key3 < _len3; _key3++) {
+                args[_key3] = arguments[_key3];
+            }
+
+            args.forEach(function (item) {
+                if (Array.isArray(item)) item.forEach(function (arrayItem) {
+                    return checkObjectValidity(arrayItem);
+                });else checkObjectValidity(item);
+            });
+
+            if (functionList.length) this.functionsList = functionList;
+
             return this;
         }
     }, {
@@ -241,8 +286,8 @@ var iDB = function () {
     }, {
         key: "where",
         value: function where() {
-            for (var _len3 = arguments.length, args = Array(_len3), _key3 = 0; _key3 < _len3; _key3++) {
-                args[_key3] = arguments[_key3];
+            for (var _len4 = arguments.length, args = Array(_len4), _key4 = 0; _key4 < _len4; _key4++) {
+                args[_key4] = arguments[_key4];
             }
 
             var conditionsList = this.compileListFromArguments(args, "function");
@@ -254,8 +299,8 @@ var iDB = function () {
     }, {
         key: "orderBy",
         value: function orderBy() {
-            for (var _len4 = arguments.length, args = Array(_len4), _key4 = 0; _key4 < _len4; _key4++) {
-                args[_key4] = arguments[_key4];
+            for (var _len5 = arguments.length, args = Array(_len5), _key5 = 0; _key5 < _len5; _key5++) {
+                args[_key5] = arguments[_key5];
             }
 
             var orderByList = this.compileListFromArguments(args, "string");
@@ -265,38 +310,51 @@ var iDB = function () {
             return this;
         }
     }, {
+        key: "groupBy",
+        value: function groupBy() {
+            for (var _len6 = arguments.length, args = Array(_len6), _key6 = 0; _key6 < _len6; _key6++) {
+                args[_key6] = arguments[_key6];
+            }
+
+            var groupByList = this.compileListFromArguments(args, "string");
+
+            if (groupByList && groupByList.length) this.groupByList = groupByList;
+
+            return this;
+        }
+    }, {
         key: "run",
         value: function run() {
-            var _this2 = this;
+            var _this3 = this;
 
             return new Promise(function (resolve, reject) {
 
-                if (!_this2.databaseName) _this2.throwError("Database name not provided");
-                if (!_this2.table) _this2.throwError("Table name not provided");
+                if (!_this3.databaseName) _this3.throwError("Database name not provided");
+                if (!_this3.table) _this3.throwError("Table name not provided");
 
                 // Clear orderBy if present for operations other than select
-                if (_this2.operation != "select") {
+                if (_this3.operation != "select") {
 
-                    if (_this2.orderByList) {
-                        _this2.orderByList = null;
-                        console.warn("Cannot use orderBy with: " + _this2.operation);
+                    if (_this3.orderByList) {
+                        _this3.orderByList = null;
+                        console.warn("Cannot use orderBy with: " + _this3.operation);
                     }
                 }
 
-                if (_this2.operation == "add") {
+                if (_this3.operation == "add") {
 
-                    if (!_this2.insertData) return;
+                    if (!_this3.insertData) return;
 
-                    _this2.openTransaction().then(function () {
+                    _this3.openTransaction().then(function () {
 
-                        var objectStore = _this2.transaction.objectStore(_this2.table);
-                        objectStore.add(_this2.insertData);
+                        var objectStore = _this3.transaction.objectStore(_this3.table);
+                        objectStore.add(_this3.insertData);
                         objectStore.onerror = function (event) {
                             return console.warn("Insertion error: " + event);
                         };
 
-                        _this2.db.close();
-                        _this2.reset();
+                        _this3.db.close();
+                        _this3.reset();
                         resolve();
                     });
                 } else {
@@ -305,55 +363,147 @@ var iDB = function () {
                         var recordsAffected = 0;
 
                         // Exit early if update has been called with no data to set.
-                        if (_this2.operation == "update" && !_this2.updateValues) {
-                            _this2.reset();
+                        if (_this3.operation == "update" && !_this3.updateValues) {
+                            _this3.reset();
                             return {
                                 v: resolve(recordsAffected)
                             };
                         }
 
-                        if (_this2.operation == "delete" || _this2.operation == "update") _this2.isDistinct = false;
+                        if (_this3.operation == "delete" || _this3.operation == "update") _this3.isDistinct = false;
 
-                        _this2.openTransaction().then(function () {
+                        _this3.openTransaction().then(function () {
 
                             var returnData = [];
 
-                            var objectStore = _this2.transaction.objectStore(_this2.table),
-                                direction = "" + (_this2.direction || "next") + (_this2.isDistinct ? "distinct" : ""),
+                            var objectStore = _this3.transaction.objectStore(_this3.table),
+                                direction = "" + (_this3.direction || "next") + (_this3.isDistinct ? "distinct" : ""),
                                 iterator = objectStore.openCursor(null, direction),
                                 matchAgainstWhereConditions = function matchAgainstWhereConditions(cursor, filteredItem) {
 
-                                if (_this2.conditionsList && _this2.conditionsList.some(function (condition) {
+                                if (_this3.conditionsList && _this3.conditionsList.some(function (condition) {
                                     return !condition(cursor.value);
                                 })) return;
 
-                                switch (_this2.operation) {
+                                (function () {
+                                    switch (_this3.operation) {
 
-                                    case "select":
-                                        returnData.push(filteredItem ? filteredItem : cursor.value);
-                                        break;
+                                        case "select":
 
-                                    case "delete":
-                                        recordsAffected++;
-                                        cursor.delete();
-                                        break;
+                                            var recordValues = filteredItem ? filteredItem : cursor.value;
 
-                                    case "update":
-                                        var updateData = cursor.value;
+                                            // Apply all scalar functions to record values
+                                            // if(this.selectList){
+                                            //     this.selectList.forEach(item => {
+                                            //         recordValues[item.column] = item.scalar ? item.scalar.reduce((prev, curr) => curr(prev), recordValues[item.column]) : recordValues[item.column] 
+                                            //     })
+                                            // }
+                                            if (_this3.functionsList) {
+                                                _this3.functionsList.forEach(function (item) {
+                                                    recordValues[item.column] = item.scalar ? item.scalar.reduce(function (prev, curr) {
+                                                        return curr(prev);
+                                                    }, recordValues[item.column]) : recordValues[item.column];
+                                                });
+                                            }
 
-                                        for (var key in _this2.updateValues) {
-                                            updateData[key] = _this2.updateValues[key];
-                                        }
+                                            returnData.push(recordValues);
+                                            break;
 
-                                        recordsAffected++;
-                                        cursor.update(updateData);
-                                        break;
-                                }
+                                        case "delete":
+                                            recordsAffected++;
+                                            cursor.delete();
+                                            break;
+
+                                        case "update":
+                                            var updateData = cursor.value;
+
+                                            for (var key in _this3.updateValues) {
+                                                updateData[key] = _this3.updateValues[key];
+                                            }
+
+                                            recordsAffected++;
+                                            cursor.update(updateData);
+                                            break;
+                                    }
+                                })();
                             },
                                 finishQuery = function finishQuery(hadErrors) {
 
-                                // Order records, if order was specified
-                                if (_this2.orderByList && _this2.orderByList.length) {
+                                var returnObject = void 0;
+
+                                // Group records
+                                if (_this3.groupByList && _this3.groupByList.length) {
+                                    (function () {
+
+                                        var aggregateFunctions = {};
+                                        returnObject = {};
+
+                                        // Pull all aggregate functions into an object for easier access and verification
+                                        // this.selectList.forEach(item => {
+                                        //     if(item.aggregate)
+                                        //         aggregateFunctions[item.column] = item.aggregate
+                                        // })
+
+                                        _this3.functionsList.forEach(function (item) {
+                                            if (item.aggregate) aggregateFunctions[item.column] = item.aggregate;
+                                        });
+
+                                        // Filter out groupBy columns that are not present in the table and warn the user
+                                        // this.groupByList = this.groupByList.filter(groupbyItem => {
+
+                                        //     const isInTable = this.s
+                                        // })
+
+                                        returnData.forEach(function (record) {
+
+                                            // Recursive function to group records together. Each iteration groups one column
+                                            var checkGroupingAgainstList = function checkGroupingAgainstList(groupList, record, object) {
+
+                                                var grouping = groupList[0];
+                                                var recordGroupingValue = record[grouping];
+                                                var convertedRecordData = _defineProperty({}, recordGroupingValue, []);
+                                                delete record[grouping];
+
+                                                groupList.shift();
+
+                                                var continueProcessing = function continueProcessing() {
+                                                    if (groupList.length) checkGroupingAgainstList(groupList, record, object[recordGroupingValue]);else object[recordGroupingValue].push(record);
+                                                };
+
+                                                // If there is an aggregation function for this grouping, execute it and continue processing
+                                                if (aggregateFunctions.hasOwnProperty(grouping) && Object.keys(object).length) {
+
+                                                    var existingKey = Object.keys(object)[0];
+                                                    recordGroupingValue = aggregateFunctions[grouping](existingKey, recordGroupingValue);
+
+                                                    // Move over the old key's content to the new one
+                                                    object[recordGroupingValue] = object[existingKey];
+                                                    delete object[existingKey];
+
+                                                    continueProcessing();
+                                                } else {
+
+                                                    if (object.hasOwnProperty(recordGroupingValue)) {
+                                                        continueProcessing();
+                                                    } else {
+
+                                                        // Add brand new entry
+                                                        if (groupList.length) {
+
+                                                            object[recordGroupingValue] = {};
+                                                            checkGroupingAgainstList(groupList, record, object[recordGroupingValue]);
+                                                        } else object[recordGroupingValue] = [record];
+                                                    }
+                                                }
+                                            };
+
+                                            checkGroupingAgainstList(_this3.groupByList.slice(0), record, returnObject);
+                                        });
+                                    })();
+                                }
+
+                                // Order records, if order was specified and results aren't grouped
+                                if (_this3.orderByList && _this3.orderByList.length && !returnObject) {
 
                                     returnData.sort(function (a, b) {
                                         var _iteratorNormalCompletion = true;
@@ -361,7 +511,7 @@ var iDB = function () {
                                         var _iteratorError = undefined;
 
                                         try {
-                                            for (var _iterator = _this2.orderByList[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
+                                            for (var _iterator = _this3.orderByList[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
                                                 var orderItem = _step.value;
 
                                                 if (a[orderItem] != b[orderItem]) return a[orderItem] < b[orderItem] ? -1 : 1;
@@ -383,10 +533,12 @@ var iDB = function () {
                                     });
                                 }
 
-                                _this2.db.close();
-                                _this2.reset();
+                                _this3.db.close();
+                                _this3.reset();
 
-                                if (hadErrors) reject();else resolve(Object.keys(returnData).length ? returnData : recordsAffected);
+                                if (hadErrors) reject();else {
+                                    if (returnObject) resolve(returnObject);else resolve(Object.keys(returnData).length ? returnData : recordsAffected);
+                                }
                             };
 
                             iterator.onsuccess = function (event) {
@@ -394,35 +546,36 @@ var iDB = function () {
                                 var cursor = event.target.result;
 
                                 // Skip values if a skip value has been provided
-                                if (_this2.skipValue) {
-                                    var skipValue = _this2.skipValue;
-                                    _this2.skipValue = null;
+                                if (_this3.skipValue) {
+                                    var skipValue = _this3.skipValue;
+                                    _this3.skipValue = null;
                                     cursor.advance(skipValue);
                                 } else {
 
                                     if (cursor) {
 
                                         // Select all data if no specific keys have been requested, otherwise filter others out
-                                        if (!_this2.selectKeys) {
+                                        if (!_this3.selectList) {
                                             matchAgainstWhereConditions(cursor);
                                         } else {
                                             (function () {
                                                 var filteredItem = {};
-                                                _this2.selectKeys.forEach(function (key) {
-                                                    return filteredItem[key] = cursor.value[key];
+                                                // this.selectList.forEach(item => filteredItem[item.column] = cursor.value[item.column])
+                                                _this3.selectList.forEach(function (item) {
+                                                    return filteredItem[item] = cursor.value[item];
                                                 });
                                                 matchAgainstWhereConditions(cursor, filteredItem);
                                             })();
                                         }
 
-                                        if (!_this2.limitValue || returnData.length < _this2.limitValue) cursor.continue();else finishQuery();
+                                        if (!_this3.limitValue || returnData.length < _this3.limitValue) cursor.continue();else finishQuery();
                                     } else finishQuery();
                                 }
                             };
 
                             iterator.onerror = function (event) {
                                 finishQuery(true);
-                                _this2.throwError("Error selecting data: " + iterator.error);
+                                _this3.throwError("Error selecting data: " + iterator.error);
                             };
                         });
                     }();
@@ -434,25 +587,25 @@ var iDB = function () {
     }, {
         key: "openTransaction",
         value: function openTransaction() {
-            var _this3 = this;
+            var _this4 = this;
 
             return new Promise(function (resolve, reject) {
 
-                if (!_this3.databaseName) _this3.throwError("Cannot start transaction. Database name not provided.");
+                if (!_this4.databaseName) _this4.throwError("Cannot start transaction. Database name not provided.");
 
-                var request = indexedDB.open(_this3.databaseName, _this3.databaseVersion);
+                var request = indexedDB.open(_this4.databaseName, _this4.databaseVersion);
 
                 request.onupgradeneeded = function () {
 
                     var transaction = request.transaction;
-                    _this3.db = request.result;
-                    _this3.newTablesList = _this3.newTablesList || [];
+                    _this4.db = request.result;
+                    _this4.newTablesList = _this4.newTablesList || [];
 
                     // Flush existing table creation data to the newTablesList
-                    if (_this3.newTableData) {
-                        _this3.newTablesList.push({
-                            tableData: _this3.newTableData,
-                            tableColumns: _this3.newTableColumns || []
+                    if (_this4.newTableData) {
+                        _this4.newTablesList.push({
+                            tableData: _this4.newTableData,
+                            tableColumns: _this4.newTableColumns || []
                         });
                     }
 
@@ -461,7 +614,7 @@ var iDB = function () {
                             tableColumns = _ref.tableColumns;
 
 
-                        var objectStore = _this3.db.createObjectStore(tableData.tableName, tableData.options);
+                        var objectStore = _this4.db.createObjectStore(tableData.tableName, tableData.options);
 
                         tableColumns.forEach(function (_ref2) {
                             var name = _ref2.name,
@@ -477,10 +630,10 @@ var iDB = function () {
                         (function () {
 
                             // Get the new and existing table data for updating comparisons 
-                            var existingTableNames = Object.keys(_this3.db.objectStoreNames).map(function (key) {
-                                return _this3.db.objectStoreNames[key];
+                            var existingTableNames = Object.keys(_this4.db.objectStoreNames).map(function (key) {
+                                return _this4.db.objectStoreNames[key];
                             }),
-                                newTableNames = _this3.newTablesList.map(function (table) {
+                                newTableNames = _this4.newTablesList.map(function (table) {
                                 return table.tableData.tableName;
                             });
 
@@ -489,12 +642,12 @@ var iDB = function () {
                                 return !newTableNames.includes(table);
                             });
                             tablesToRemove.forEach(function (table) {
-                                _this3.db.deleteObjectStore(table);
+                                _this4.db.deleteObjectStore(table);
                                 existingTableNames.splice(existingTableNames.indexOf(table), 1);
                             });
 
                             // Then decide which tables are new, and need adding
-                            var tablesToAdd = _this3.newTablesList.filter(function (table) {
+                            var tablesToAdd = _this4.newTablesList.filter(function (table) {
                                 return !existingTableNames.includes(table.tableData.tableName);
                             });
                             tablesToAdd.forEach(addTable);
@@ -509,7 +662,7 @@ var iDB = function () {
                                 });
                                 var newColumns = [];
 
-                                _this3.newTablesList.some(function (newTable) {
+                                _this4.newTablesList.some(function (newTable) {
                                     if (newTable.tableData.tableName == existingTableName) {
                                         newColumns = newTable.tableColumns;
                                         return true;
@@ -541,27 +694,27 @@ var iDB = function () {
                                 });
                             });
                         })();
-                    } else _this3.newTablesList.forEach(addTable);
+                    } else _this4.newTablesList.forEach(addTable);
 
-                    _this3.newTablesList = [];
-                    _this3.newTableData = null;
-                    _this3.newTablesColumns = [];
+                    _this4.newTablesList = [];
+                    _this4.newTableData = null;
+                    _this4.newTablesColumns = [];
                 };
 
                 request.onerror = function () {
-                    _this3.reset();
-                    _this3.throwError("Error opening database " + request.error);
+                    _this4.reset();
+                    _this4.throwError("Error opening database " + request.error);
                 };
 
                 request.onsuccess = function () {
 
-                    if (_this3.table) {
-                        _this3.db = request.result;
-                        _this3.transaction = request.result.transaction(_this3.table, "readwrite");
+                    if (_this4.table) {
+                        _this4.db = request.result;
+                        _this4.transaction = request.result.transaction(_this4.table, "readwrite");
 
-                        _this3.transaction.oncomplete = function () {
-                            _this3.transaction = null;
-                            _this3.db.close();
+                        _this4.transaction.oncomplete = function () {
+                            _this4.transaction = null;
+                            _this4.db.close();
                         };
                     } else request.result.close();
 
@@ -578,7 +731,8 @@ var iDB = function () {
             this.operation = null;
             this.table = null;
             this.limitValue = null;
-            this.selectKeys = null;
+            this.selectList = null;
+            this.functionsList = null;
             this.insertData = null;
             this.skipValue = null;
             this.direction = "next";
@@ -586,6 +740,7 @@ var iDB = function () {
             this.conditionsList = null;
             this.updateValues = null;
             this.orderByList = null;
+            this.groupByList = null;
 
             this.objectStoreProperties = null;
         }
@@ -604,7 +759,7 @@ var iDB = function () {
     }, {
         key: "compileListFromArguments",
         value: function compileListFromArguments(args, type) {
-            var _this4 = this;
+            var _this5 = this;
 
             var list = [];
 
@@ -613,8 +768,8 @@ var iDB = function () {
 
                     if (item.some(function (subItem) {
                         return (typeof subItem === "undefined" ? "undefined" : _typeof(subItem)) !== type;
-                    })) _this4.throwError("Arguments must all be functions " + type + "s");else list = list.concat(item);
-                } else _this4.throwError("Arguments must all be " + type + "s");
+                    })) _this5.throwError("Arguments must all be " + type + "s");else list = list.concat(item);
+                } else _this5.throwError("Arguments must all be " + type + "s");
             });
 
             return list;
@@ -669,6 +824,11 @@ var iDB = function () {
                 select: {
                     explanation: "Data to select",
                     parameters: "Any number of string parameters, string arrays and any combination of the two (Optional) - Leaving it empty will select all keys",
+                    returns: "iDB"
+                },
+                functions: {
+                    explanation: "Scalar or aggregate functions to apply to values. Scalar functions are applied to each value individually, and aggregate functions are applied to all values grouped together",
+                    parameters: "Any number of object parameters, arrays of object parameters or any combination of the two.",
                     returns: "iDB"
                 },
                 from: {
@@ -733,7 +893,12 @@ var iDB = function () {
                 },
                 orderBy: {
                     explanation: "Determine the order of records with list of column names",
-                    parameters: "Any number of string parameters, arrays of string parameters and any combination",
+                    parameters: "Any number of string parameters, arrays of string parameters and any combination of the two",
+                    returns: "iDB"
+                },
+                groupBy: {
+                    explanation: "Group the results together by some columns",
+                    parameters: "Any number of string parameters, arrays of string parameters and any combination of the two",
                     returns: "iDB"
                 }
             });

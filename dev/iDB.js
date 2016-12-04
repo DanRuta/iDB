@@ -93,6 +93,7 @@ class iDB {
 
     static addColumns (...args) {
         this.compileListFromArguments(args, "string").forEach(this.addColumn.bind(this))
+        return this
     }
     
 
@@ -101,14 +102,57 @@ class iDB {
 
         this.validateOperation("select")
 
-        const selectKeysList = this.compileListFromArguments(args, "string")
+        const selectList = this.compileListFromArguments(args, "string")
 
-        if(selectKeysList && selectKeysList.length)
-            this.selectKeys = selectKeysList
+        if(selectList && selectList.length)
+            this.selectList = selectList
 
         this.operation = "select"
         return this
     }
+
+    static functions (...args) {
+
+        const functionList = [],
+
+        checkObjectValidity = object => {
+
+            if(typeof object == "object" && object == Object(object)){
+
+                if(!object.hasOwnProperty("column"))
+                    this.throwError("No column name provided in object. It must be provided to the key 'column'")
+
+                // Make sure the scalar functions provided are in an array
+                if(object.hasOwnProperty("scalar")){
+
+                    if(typeof object.scalar == "function")
+                        object.scalar = [object.scalar]
+
+                    else if(!Array.isArray(object.scalar) || object.scalar.some(object => typeof object != "function"))
+                        this.throwError("Scalar value must be either a function or array of functions")
+                }
+
+                if(object.hasOwnProperty("aggregate") && typeof object.aggregate != "function")
+                    this.throwError("Aggregate value must be a function")
+
+            }else this.throwError("Functions must be provided in objects, along with their columns. Check the documentation for more info.")
+
+            functionList.push(object)
+        }
+
+        // Parse each item into an object readable by the rest of the library
+        args.forEach(item => {
+            if(Array.isArray(item))
+                 item.forEach(arrayItem => checkObjectValidity(arrayItem))
+            else checkObjectValidity(item)
+        })
+
+        if(functionList.length)
+            this.functionsList = functionList
+
+        return this
+    }
+
 
     static insert (data) {
 
@@ -226,6 +270,16 @@ class iDB {
         return this
     }
 
+    static groupBy (...args) {        
+
+        const groupByList = this.compileListFromArguments(args, "string")
+
+        if(groupByList && groupByList.length)
+            this.groupByList =  groupByList
+
+        return this
+    }
+
 
     static run () {
 
@@ -289,7 +343,22 @@ class iDB {
                         switch(this.operation){
 
                             case ("select"):
-                                returnData.push(filteredItem ? filteredItem : cursor.value)
+
+                                const recordValues = filteredItem ? filteredItem : cursor.value
+
+                                // Apply all scalar functions to record values
+                                // if(this.selectList){
+                                //     this.selectList.forEach(item => {
+                                //         recordValues[item.column] = item.scalar ? item.scalar.reduce((prev, curr) => curr(prev), recordValues[item.column]) : recordValues[item.column] 
+                                //     })
+                                // }
+                                if(this.functionsList){
+                                    this.functionsList.forEach(item => {
+                                        recordValues[item.column] = item.scalar ? item.scalar.reduce((prev, curr) => curr(prev), recordValues[item.column]) : recordValues[item.column] 
+                                    })
+                                }
+
+                                returnData.push(recordValues)
                                 break
 
                             case ("delete"):
@@ -312,8 +381,87 @@ class iDB {
 
                     finishQuery = hadErrors => {
 
-                        // Order records, if order was specified
-                        if(this.orderByList && this.orderByList.length){
+                        let returnObject
+
+                        // Group records
+                        if(this.groupByList && this.groupByList.length){
+
+                            const aggregateFunctions = {}
+                            returnObject = {}
+
+                            // Pull all aggregate functions into an object for easier access and verification
+                            // this.selectList.forEach(item => {
+                            //     if(item.aggregate)
+                            //         aggregateFunctions[item.column] = item.aggregate
+                            // })
+
+                            this.functionsList.forEach(item => {
+                                if(item.aggregate)
+                                    aggregateFunctions[item.column] = item.aggregate
+                            })
+
+
+                            // Filter out groupBy columns that are not present in the table and warn the user
+                            // this.groupByList = this.groupByList.filter(groupbyItem => {
+
+                            //     const isInTable = this.s
+                            // })
+
+                            returnData.forEach(record => {
+
+                                // Recursive function to group records together. Each iteration groups one column
+                                const checkGroupingAgainstList = (groupList, record, object) => {
+
+                                    const grouping = groupList[0]
+                                    let recordGroupingValue = record[grouping]
+                                    const convertedRecordData = {[recordGroupingValue] : []}
+                                    delete record[grouping]
+
+                                    groupList.shift()
+
+                                    const continueProcessing = () => {
+                                        if(groupList.length)
+                                             checkGroupingAgainstList(groupList, record, object[recordGroupingValue])
+                                        else object[recordGroupingValue].push(record)
+                                    }
+
+                                    // If there is an aggregation function for this grouping, execute it and continue processing
+                                    if(aggregateFunctions.hasOwnProperty(grouping) && Object.keys(object).length){
+
+                                        const existingKey = Object.keys(object)[0]
+                                        recordGroupingValue = aggregateFunctions[grouping](existingKey, recordGroupingValue)
+
+                                        // Move over the old key's content to the new one
+                                        object[recordGroupingValue] = object[existingKey]
+                                        delete object[existingKey]
+
+                                        continueProcessing()
+
+                                    }else {
+
+                                        if(object.hasOwnProperty(recordGroupingValue)){
+                                            continueProcessing()
+
+                                        }else {
+
+                                            // Add brand new entry
+                                            if(groupList.length){
+
+                                                object[recordGroupingValue] = {}
+                                                checkGroupingAgainstList(groupList, record, object[recordGroupingValue])
+
+                                            }else object[recordGroupingValue] = [record]
+                                        }
+                                    }
+                                }
+
+                                checkGroupingAgainstList(this.groupByList.slice(0), record, returnObject) 
+                            })
+
+                        }
+
+                        // Order records, if order was specified and results aren't grouped
+                        if(this.orderByList && this.orderByList.length && !returnObject){
 
                             returnData.sort((a,b) => {                                
                                 for(const orderItem of this.orderByList){
@@ -328,7 +476,11 @@ class iDB {
 
                         if(hadErrors)
                              reject()
-                        else resolve(Object.keys(returnData).length ? returnData : recordsAffected)
+                        else {
+                            if(returnObject)
+                                 resolve(returnObject)
+                            else resolve(Object.keys(returnData).length ? returnData : recordsAffected)
+                        }
                     }
 
                     iterator.onsuccess = event => {
@@ -345,12 +497,13 @@ class iDB {
                             if(cursor){
 
                                 // Select all data if no specific keys have been requested, otherwise filter others out
-                                if(!this.selectKeys){
+                                if(!this.selectList){
                                     matchAgainstWhereConditions(cursor)
 
                                 }else {
                                     const filteredItem = {}
-                                    this.selectKeys.forEach(key => filteredItem[key] = cursor.value[key])
+                                    // this.selectList.forEach(item => filteredItem[item.column] = cursor.value[item.column])
+                                    this.selectList.forEach(item => filteredItem[item] = cursor.value[item])
                                     matchAgainstWhereConditions(cursor, filteredItem)
                                 }
 
@@ -483,7 +636,8 @@ class iDB {
         this.operation = null
         this.table = null
         this.limitValue = null
-        this.selectKeys = null
+        this.selectList = null
+        this.functionsList = null
         this.insertData = null
         this.skipValue = null
         this.direction = "next"
@@ -491,6 +645,7 @@ class iDB {
         this.conditionsList = null
         this.updateValues = null
         this.orderByList = null
+        this.groupByList = null
 
         this.objectStoreProperties = null
     }
@@ -519,7 +674,7 @@ class iDB {
             else if(Array.isArray(item)){
 
                 if(item.some(subItem => typeof subItem !== type))
-                    this.throwError(`Arguments must all be functions ${type}s`)
+                    this.throwError(`Arguments must all be ${type}s`)
                 else list = list.concat(item)
 
             }else this.throwError(`Arguments must all be ${type}s`)
@@ -576,6 +731,11 @@ class iDB {
             select : {
                 explanation: "Data to select",
                 parameters: "Any number of string parameters, string arrays and any combination of the two (Optional) - Leaving it empty will select all keys",
+                returns: "iDB"
+            },
+            functions: {
+                explanation: "Scalar or aggregate functions to apply to values. Scalar functions are applied to each value individually, and aggregate functions are applied to all values grouped together",
+                parameters: "Any number of object parameters, arrays of object parameters or any combination of the two.",
                 returns: "iDB"
             },
             from: {
@@ -640,7 +800,12 @@ class iDB {
             },
             orderBy: {
                 explanation: "Determine the order of records with list of column names",
-                parameters: "Any number of string parameters, arrays of string parameters and any combination",
+                parameters: "Any number of string parameters, arrays of string parameters and any combination of the two",
+                returns: "iDB"
+            },
+            groupBy: {
+                explanation: "Group the results together by some columns",
+                parameters: "Any number of string parameters, arrays of string parameters and any combination of the two",
                 returns: "iDB"
             }
         })
