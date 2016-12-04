@@ -52,3 +52,4 @@ NOTE: Drop table is not implemented because in indexedDB, the only way to update
 #### You can see these two tables in the console by using ``` iDB.help()```
 
 ##### List of examples coming soon
+
