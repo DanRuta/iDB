@@ -393,11 +393,6 @@ var iDB = function () {
                                             var recordValues = filteredItem ? filteredItem : cursor.value;
 
                                             // Apply all scalar functions to record values
-                                            // if(this.selectList){
-                                            //     this.selectList.forEach(item => {
-                                            //         recordValues[item.column] = item.scalar ? item.scalar.reduce((prev, curr) => curr(prev), recordValues[item.column]) : recordValues[item.column] 
-                                            //     })
-                                            // }
                                             if (_this3.functionsList) {
                                                 _this3.functionsList.forEach(function (item) {
                                                     recordValues[item.column] = item.scalar ? item.scalar.reduce(function (prev, curr) {
@@ -433,77 +428,93 @@ var iDB = function () {
 
                                 // Group records
                                 if (_this3.groupByList && _this3.groupByList.length) {
-                                    (function () {
 
-                                        var aggregateFunctions = {};
-                                        returnObject = {};
+                                    // Filter out groupBy items not included in the selected items list, if selected items are provided
+                                    if (_this3.selectList && _this3.selectList.length) {
+                                        _this3.groupByList = _this3.groupByList.filter(function (groupByItem) {
+                                            var exists = _this3.selectList.includes(groupByItem);
 
-                                        // Pull all aggregate functions into an object for easier access and verification
-                                        // this.selectList.forEach(item => {
-                                        //     if(item.aggregate)
-                                        //         aggregateFunctions[item.column] = item.aggregate
-                                        // })
+                                            if (!exists) console.warn(groupByItem + " not in columns selected (" + _this3.selectList.join(", ") + ")");
 
-                                        _this3.functionsList.forEach(function (item) {
-                                            if (item.aggregate) aggregateFunctions[item.column] = item.aggregate;
+                                            return exists;
                                         });
+                                    }
 
-                                        // Filter out groupBy columns that are not present in the table and warn the user
-                                        // this.groupByList = this.groupByList.filter(groupbyItem => {
+                                    // Only continue grouping if there are no groupBy columns left after filtering
+                                    if (_this3.groupByList.length) {
+                                        (function () {
 
-                                        //     const isInTable = this.s
-                                        // })
+                                            var aggregateFunctions = {};
+                                            returnObject = {};
 
-                                        returnData.forEach(function (record) {
+                                            // Pull all aggregate functions into an object for easier access and verification
+                                            if (_this3.functionsList) {
+                                                _this3.functionsList.forEach(function (item) {
+                                                    if (item.aggregate) aggregateFunctions[item.column] = item.aggregate;
+                                                });
+                                            }
 
-                                            // Recursive function to group records together. Each iteration groups one column
-                                            var checkGroupingAgainstList = function checkGroupingAgainstList(groupList, record, object) {
+                                            returnData.forEach(function (record) {
 
-                                                var grouping = groupList[0];
-                                                var recordGroupingValue = record[grouping];
-                                                var convertedRecordData = _defineProperty({}, recordGroupingValue, []);
-                                                delete record[grouping];
+                                                // Recursive function to group records together. Each iteration groups one column
+                                                var checkGroupingAgainstList = function checkGroupingAgainstList(groupList, record, object) {
 
-                                                groupList.shift();
+                                                    var grouping = groupList[0];
+                                                    var recordGroupingValue = record[grouping];
+                                                    var convertedRecordData = _defineProperty({}, recordGroupingValue, []);
+                                                    delete record[grouping];
 
-                                                var continueProcessing = function continueProcessing() {
-                                                    if (groupList.length) checkGroupingAgainstList(groupList, record, object[recordGroupingValue]);else object[recordGroupingValue].push(record);
-                                                };
+                                                    groupList.shift();
 
-                                                // If there is an aggregation function for this grouping, execute it and continue processing
-                                                if (aggregateFunctions.hasOwnProperty(grouping) && Object.keys(object).length) {
+                                                    var continueProcessing = function continueProcessing() {
+                                                        if (groupList.length) checkGroupingAgainstList(groupList, record, object[recordGroupingValue]);else object[recordGroupingValue].push(record);
+                                                    };
 
-                                                    var existingKey = Object.keys(object)[0];
-                                                    recordGroupingValue = aggregateFunctions[grouping](existingKey, recordGroupingValue);
+                                                    // If there is an aggregation function for this grouping, execute it and continue processing
+                                                    if (aggregateFunctions.hasOwnProperty(grouping) && Object.keys(object).length) {
 
-                                                    // Move over the old key's content to the new one
-                                                    object[recordGroupingValue] = object[existingKey];
-                                                    delete object[existingKey];
+                                                        var existingKey = Object.keys(object)[0];
+                                                        recordGroupingValue = aggregateFunctions[grouping](existingKey, recordGroupingValue);
 
-                                                    continueProcessing();
-                                                } else {
+                                                        // Move over the old key's content to the new one
+                                                        object[recordGroupingValue] = object[existingKey];
+                                                        delete object[existingKey];
 
-                                                    if (object.hasOwnProperty(recordGroupingValue)) {
                                                         continueProcessing();
                                                     } else {
 
-                                                        // Add brand new entry
-                                                        if (groupList.length) {
+                                                        if (object.hasOwnProperty(recordGroupingValue)) {
+                                                            continueProcessing();
+                                                        } else {
 
-                                                            object[recordGroupingValue] = {};
-                                                            checkGroupingAgainstList(groupList, record, object[recordGroupingValue]);
-                                                        } else object[recordGroupingValue] = [record];
+                                                            // Add brand new entry
+                                                            if (groupList.length) {
+
+                                                                object[recordGroupingValue] = {};
+                                                                checkGroupingAgainstList(groupList, record, object[recordGroupingValue]);
+                                                            } else object[recordGroupingValue] = [record];
+                                                        }
                                                     }
-                                                }
-                                            };
+                                                };
 
-                                            checkGroupingAgainstList(_this3.groupByList.slice(0), record, returnObject);
-                                        });
-                                    })();
+                                                checkGroupingAgainstList(_this3.groupByList.slice(0), record, returnObject);
+                                            });
+                                        })();
+                                    }
                                 }
 
                                 // Order records, if order was specified and results aren't grouped
                                 if (_this3.orderByList && _this3.orderByList.length && !returnObject) {
+
+                                    // Filter out orderBy columns not present in the selected items, if given, and warn user
+                                    if (_this3.selectList && _this3.orderByList.length) {
+                                        _this3.orderByList = _this3.orderByList.filter(function (orderByItem) {
+
+                                            var exists = _this3.selectList.includes(orderByItem);
+
+                                            if (!exists) console.warn(orderByItem + " not in columns selected (" + _this3.selectList.join(", ") + ")");
+                                        });
+                                    }
 
                                     returnData.sort(function (a, b) {
                                         var _iteratorNormalCompletion = true;

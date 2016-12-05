@@ -347,11 +347,6 @@ class iDB {
                                 const recordValues = filteredItem ? filteredItem : cursor.value
 
                                 // Apply all scalar functions to record values
-                                // if(this.selectList){
-                                //     this.selectList.forEach(item => {
-                                //         recordValues[item.column] = item.scalar ? item.scalar.reduce((prev, curr) => curr(prev), recordValues[item.column]) : recordValues[item.column] 
-                                //     })
-                                // }
                                 if(this.functionsList){
                                     this.functionsList.forEach(item => {
                                         recordValues[item.column] = item.scalar ? item.scalar.reduce((prev, curr) => curr(prev), recordValues[item.column]) : recordValues[item.column] 
@@ -386,82 +381,98 @@ class iDB {
                         // Group records
                         if(this.groupByList && this.groupByList.length){
 
-                            const aggregateFunctions = {}
-                            returnObject = {}
+                            // Filter out groupBy items not included in the selected items list, if selected items are provided
+                            if(this.selectList && this.selectList.length){
+                                this.groupByList = this.groupByList.filter(groupByItem => {
+                                    const exists = this.selectList.includes(groupByItem)
 
-                            // Pull all aggregate functions into an object for easier access and verification
-                            // this.selectList.forEach(item => {
-                            //     if(item.aggregate)
-                            //         aggregateFunctions[item.column] = item.aggregate
-                            // })
+                                    if(!exists)
+                                        console.warn(`${groupByItem} not in columns selected (${this.selectList.join(", ")})`)
 
-                            this.functionsList.forEach(item => {
-                                if(item.aggregate)
-                                    aggregateFunctions[item.column] = item.aggregate
-                            })
+                                    return exists           
+                                })
+                            }
 
+                            // Only continue grouping if there are no groupBy columns left after filtering
+                            if(this.groupByList.length){
 
-                            // Filter out groupBy columns that are not present in the table and warn the user
-                            // this.groupByList = this.groupByList.filter(groupbyItem => {
+                                const aggregateFunctions = {}
+                                returnObject = {}
 
-                            //     const isInTable = this.s
-                            // })
+                                // Pull all aggregate functions into an object for easier access and verification
+                                if(this.functionsList){
+                                    this.functionsList.forEach(item => {
+                                        if(item.aggregate)
+                                            aggregateFunctions[item.column] = item.aggregate
+                                    })
+                                }
 
-                            returnData.forEach(record => {
+                                returnData.forEach(record => {
 
-                                // Recursive function to group records together. Each iteration groups one column
-                                const checkGroupingAgainstList = (groupList, record, object) => {
+                                    // Recursive function to group records together. Each iteration groups one column
+                                    const checkGroupingAgainstList = (groupList, record, object) => {
 
-                                    const grouping = groupList[0]
-                                    let recordGroupingValue = record[grouping]
-                                    const convertedRecordData = {[recordGroupingValue] : []}
-                                    delete record[grouping]
+                                        const grouping = groupList[0]
+                                        let recordGroupingValue = record[grouping]
+                                        const convertedRecordData = {[recordGroupingValue] : []}
+                                        delete record[grouping]
 
-                                    groupList.shift()
+                                        groupList.shift()
 
-                                    const continueProcessing = () => {
-                                        if(groupList.length)
-                                             checkGroupingAgainstList(groupList, record, object[recordGroupingValue])
-                                        else object[recordGroupingValue].push(record)
-                                    }
+                                        const continueProcessing = () => {
+                                            if(groupList.length)
+                                                 checkGroupingAgainstList(groupList, record, object[recordGroupingValue])
+                                            else object[recordGroupingValue].push(record)
+                                        }
 
-                                    // If there is an aggregation function for this grouping, execute it and continue processing
-                                    if(aggregateFunctions.hasOwnProperty(grouping) && Object.keys(object).length){
+                                        // If there is an aggregation function for this grouping, execute it and continue processing
+                                        if(aggregateFunctions.hasOwnProperty(grouping) && Object.keys(object).length){
 
-                                        const existingKey = Object.keys(object)[0]
-                                        recordGroupingValue = aggregateFunctions[grouping](existingKey, recordGroupingValue)
+                                            const existingKey = Object.keys(object)[0]
+                                            recordGroupingValue = aggregateFunctions[grouping](existingKey, recordGroupingValue)
 
-                                        // Move over the old key's content to the new one
-                                        object[recordGroupingValue] = object[existingKey]
-                                        delete object[existingKey]
+                                            // Move over the old key's content to the new one
+                                            object[recordGroupingValue] = object[existingKey]
+                                            delete object[existingKey]
 
-                                        continueProcessing()
-
-                                    }else {
-
-                                        if(object.hasOwnProperty(recordGroupingValue)){
                                             continueProcessing()
 
                                         }else {
 
-                                            // Add brand new entry
-                                            if(groupList.length){
+                                            if(object.hasOwnProperty(recordGroupingValue)){
+                                                continueProcessing()
 
-                                                object[recordGroupingValue] = {}
-                                                checkGroupingAgainstList(groupList, record, object[recordGroupingValue])
+                                            }else {
 
-                                            }else object[recordGroupingValue] = [record]
+                                                // Add brand new entry
+                                                if(groupList.length){
+
+                                                    object[recordGroupingValue] = {}
+                                                    checkGroupingAgainstList(groupList, record, object[recordGroupingValue])
+
+                                                }else object[recordGroupingValue] = [record]
+                                            }
                                         }
                                     }
-                                }
 
-                                checkGroupingAgainstList(this.groupByList.slice(0), record, returnObject) 
-                            })
-
+                                    checkGroupingAgainstList(this.groupByList.slice(0), record, returnObject) 
+                                })
+                            }
                         }
 
                         // Order records, if order was specified and results aren't grouped
                         if(this.orderByList && this.orderByList.length && !returnObject){
+
+                            // Filter out orderBy columns not present in the selected items, if given, and warn user
+                            if(this.selectList && this.orderByList.length){
+                                this.orderByList = this.orderByList.filter(orderByItem => {
+
+                                    const exists = this.selectList.includes(orderByItem)
+
+                                    if(!exists)
+                                        console.warn(`${orderByItem} not in columns selected (${this.selectList.join(", ")})`)
+                                })
+                            }
 
                             returnData.sort((a,b) => {                                
                                 for(const orderItem of this.orderByList){
