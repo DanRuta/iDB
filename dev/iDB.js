@@ -471,6 +471,8 @@ class iDB {
 
                                     if(!exists)
                                         console.warn(`${orderByItem} not in columns selected (${this.selectList.join(", ")})`)
+
+                                    return exists
                                 })
                             }
 

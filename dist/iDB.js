@@ -513,6 +513,8 @@ var iDB = function () {
                                             var exists = _this3.selectList.includes(orderByItem);
 
                                             if (!exists) console.warn(orderByItem + " not in columns selected (" + _this3.selectList.join(", ") + ")");
+
+                                            return exists;
                                         });
                                     }
 
