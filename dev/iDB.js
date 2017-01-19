@@ -3,13 +3,34 @@ class iDB {
     constructor () {this.throwError("iDB cannot be instantiated. Use iDB.help() to log out more info.")}
 
     // Database management
+    static exists (database) {
+
+        if(!database) this.throwError("Database name must be specified")
+
+        return new Promise(resolve => {
+
+            const request = indexedDB.open(database)
+
+            request.onupgradeneeded = e => {
+                if(e.target.transaction)
+                    e.target.transaction.abort()
+                resolve(false)
+            }
+            request.onsuccess = e => {
+                if(e.target.transaction)
+                    e.target.transaction.abort()
+                resolve(true)
+            }
+        })
+    }
+
     static use (database) {
         this.databaseName = database
         return this
     }
 
     static setDatabase (...args) {
-
+ 
         if(!args.length) this.throwError("Database name must be specified")
 
         this.reset(true)
@@ -21,8 +42,14 @@ class iDB {
 
         else if(args.length>2) this.throwError("Invalid number of parameters. Documentation: https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/open")
 
-        this.openTransaction()
-        this.reset(true)                
+        return new Promise((resolve) => {
+
+            this.openTransaction().then(() => {
+                this.reset(true)                
+                resolve()
+            })
+        })
+
     }
 
     static dropDatabase (database) { 
@@ -153,7 +180,6 @@ class iDB {
         return this
     }
 
-
     static insert (data) {
 
         this.validateOperation("add")
@@ -258,7 +284,6 @@ class iDB {
 
         return this
     }
-
 
     static orderBy (...args) {
 
@@ -730,6 +755,11 @@ class iDB {
                 explanation: "Select the database to use. This does not get reset after queries, so setting it once should be enough.",
                 parameters: "[0-String] Database name",
                 returns: "iDB"
+            },
+            exists: {
+                explanation: "Check if a database exists",
+                parameters: "[0-String] Database name",
+                returns: "Promise (with Boolean)"
             }
         })
 

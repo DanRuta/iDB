@@ -19,6 +19,26 @@ var iDB = function () {
 
 
     _createClass(iDB, null, [{
+        key: "exists",
+        value: function exists(database) {
+
+            if (!database) this.throwError("Database name must be specified");
+
+            return new Promise(function (resolve) {
+
+                var request = indexedDB.open(database);
+
+                request.onupgradeneeded = function (e) {
+                    if (e.target.transaction) e.target.transaction.abort();
+                    resolve(false);
+                };
+                request.onsuccess = function (e) {
+                    if (e.target.transaction) e.target.transaction.abort();
+                    resolve(true);
+                };
+            });
+        }
+    }, {
         key: "use",
         value: function use(database) {
             this.databaseName = database;
@@ -27,6 +47,7 @@ var iDB = function () {
     }, {
         key: "setDatabase",
         value: function setDatabase() {
+            var _this = this;
 
             if (!arguments.length) this.throwError("Database name must be specified");
 
@@ -36,13 +57,18 @@ var iDB = function () {
 
             if (arguments.length == 2) this.databaseVersion = arguments.length <= 1 ? undefined : arguments[1];else if (arguments.length > 2) this.throwError("Invalid number of parameters. Documentation: https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/open");
 
-            this.openTransaction();
-            this.reset(true);
+            return new Promise(function (resolve) {
+
+                _this.openTransaction().then(function () {
+                    _this.reset(true);
+                    resolve();
+                });
+            });
         }
     }, {
         key: "dropDatabase",
         value: function dropDatabase(database) {
-            var _this = this;
+            var _this2 = this;
 
             if (!database) this.throwError("No database name provided");
 
@@ -57,7 +83,7 @@ var iDB = function () {
                     return reject();
                 };
 
-                _this.reset(true);
+                _this2.reset(true);
             });
         }
     }, {
@@ -144,25 +170,25 @@ var iDB = function () {
     }, {
         key: "functions",
         value: function functions() {
-            var _this2 = this;
+            var _this3 = this;
 
             var functionList = [],
                 checkObjectValidity = function checkObjectValidity(object) {
 
                 if ((typeof object === "undefined" ? "undefined" : _typeof(object)) == "object" && object == Object(object)) {
 
-                    if (!object.hasOwnProperty("column")) _this2.throwError("No column name provided in object. It must be provided to the key 'column'");
+                    if (!object.hasOwnProperty("column")) _this3.throwError("No column name provided in object. It must be provided to the key 'column'");
 
                     // Make sure the scalar functions provided are in an array
                     if (object.hasOwnProperty("scalar")) {
 
                         if (typeof object.scalar == "function") object.scalar = [object.scalar];else if (!Array.isArray(object.scalar) || object.scalar.some(function (object) {
                             return typeof object != "function";
-                        })) _this2.throwError("Scalar value must be either a function or array of functions");
+                        })) _this3.throwError("Scalar value must be either a function or array of functions");
                     }
 
-                    if (object.hasOwnProperty("aggregate") && typeof object.aggregate != "function") _this2.throwError("Aggregate value must be a function");
-                } else _this2.throwError("Functions must be provided in objects, along with their columns. Check the documentation for more info.");
+                    if (object.hasOwnProperty("aggregate") && typeof object.aggregate != "function") _this3.throwError("Aggregate value must be a function");
+                } else _this3.throwError("Functions must be provided in objects, along with their columns. Check the documentation for more info.");
 
                 functionList.push(object);
             };
@@ -325,36 +351,36 @@ var iDB = function () {
     }, {
         key: "run",
         value: function run() {
-            var _this3 = this;
+            var _this4 = this;
 
             return new Promise(function (resolve, reject) {
 
-                if (!_this3.databaseName) _this3.throwError("Database name not provided");
-                if (!_this3.table) _this3.throwError("Table name not provided");
+                if (!_this4.databaseName) _this4.throwError("Database name not provided");
+                if (!_this4.table) _this4.throwError("Table name not provided");
 
                 // Clear orderBy if present for operations other than select
-                if (_this3.operation != "select") {
+                if (_this4.operation != "select") {
 
-                    if (_this3.orderByList) {
-                        _this3.orderByList = null;
-                        console.warn("Cannot use orderBy with: " + _this3.operation);
+                    if (_this4.orderByList) {
+                        _this4.orderByList = null;
+                        console.warn("Cannot use orderBy with: " + _this4.operation);
                     }
                 }
 
-                if (_this3.operation == "add") {
+                if (_this4.operation == "add") {
 
-                    if (!_this3.insertData) return;
+                    if (!_this4.insertData) return;
 
-                    _this3.openTransaction().then(function () {
+                    _this4.openTransaction().then(function () {
 
-                        var objectStore = _this3.transaction.objectStore(_this3.table);
-                        objectStore.add(_this3.insertData);
+                        var objectStore = _this4.transaction.objectStore(_this4.table);
+                        objectStore.add(_this4.insertData);
                         objectStore.onerror = function (event) {
                             return console.warn("Insertion error: " + event);
                         };
 
-                        _this3.db.close();
-                        _this3.reset();
+                        _this4.db.close();
+                        _this4.reset();
                         resolve();
                     });
                 } else {
@@ -363,38 +389,38 @@ var iDB = function () {
                         var recordsAffected = 0;
 
                         // Exit early if update has been called with no data to set.
-                        if (_this3.operation == "update" && !_this3.updateValues) {
-                            _this3.reset();
+                        if (_this4.operation == "update" && !_this4.updateValues) {
+                            _this4.reset();
                             return {
                                 v: resolve(recordsAffected)
                             };
                         }
 
-                        if (_this3.operation == "delete" || _this3.operation == "update") _this3.isDistinct = false;
+                        if (_this4.operation == "delete" || _this4.operation == "update") _this4.isDistinct = false;
 
-                        _this3.openTransaction().then(function () {
+                        _this4.openTransaction().then(function () {
 
                             var returnData = [];
 
-                            var objectStore = _this3.transaction.objectStore(_this3.table),
-                                direction = "" + (_this3.direction || "next") + (_this3.isDistinct ? "distinct" : ""),
+                            var objectStore = _this4.transaction.objectStore(_this4.table),
+                                direction = "" + (_this4.direction || "next") + (_this4.isDistinct ? "distinct" : ""),
                                 iterator = objectStore.openCursor(null, direction),
                                 matchAgainstWhereConditions = function matchAgainstWhereConditions(cursor, filteredItem) {
 
-                                if (_this3.conditionsList && _this3.conditionsList.some(function (condition) {
+                                if (_this4.conditionsList && _this4.conditionsList.some(function (condition) {
                                     return !condition(cursor.value);
                                 })) return;
 
                                 (function () {
-                                    switch (_this3.operation) {
+                                    switch (_this4.operation) {
 
                                         case "select":
 
                                             var recordValues = filteredItem ? filteredItem : cursor.value;
 
                                             // Apply all scalar functions to record values
-                                            if (_this3.functionsList) {
-                                                _this3.functionsList.forEach(function (item) {
+                                            if (_this4.functionsList) {
+                                                _this4.functionsList.forEach(function (item) {
                                                     recordValues[item.column] = item.scalar ? item.scalar.reduce(function (prev, curr) {
                                                         return curr(prev);
                                                     }, recordValues[item.column]) : recordValues[item.column];
@@ -412,8 +438,8 @@ var iDB = function () {
                                         case "update":
                                             var updateData = cursor.value;
 
-                                            for (var key in _this3.updateValues) {
-                                                updateData[key] = _this3.updateValues[key];
+                                            for (var key in _this4.updateValues) {
+                                                updateData[key] = _this4.updateValues[key];
                                             }
 
                                             recordsAffected++;
@@ -427,29 +453,29 @@ var iDB = function () {
                                 var returnObject = void 0;
 
                                 // Group records
-                                if (_this3.groupByList && _this3.groupByList.length) {
+                                if (_this4.groupByList && _this4.groupByList.length) {
 
                                     // Filter out groupBy items not included in the selected items list, if selected items are provided
-                                    if (_this3.selectList && _this3.selectList.length) {
-                                        _this3.groupByList = _this3.groupByList.filter(function (groupByItem) {
-                                            var exists = _this3.selectList.includes(groupByItem);
+                                    if (_this4.selectList && _this4.selectList.length) {
+                                        _this4.groupByList = _this4.groupByList.filter(function (groupByItem) {
+                                            var exists = _this4.selectList.includes(groupByItem);
 
-                                            if (!exists) console.warn(groupByItem + " not in columns selected (" + _this3.selectList.join(", ") + ")");
+                                            if (!exists) console.warn(groupByItem + " not in columns selected (" + _this4.selectList.join(", ") + ")");
 
                                             return exists;
                                         });
                                     }
 
                                     // Only continue grouping if there are no groupBy columns left after filtering
-                                    if (_this3.groupByList.length) {
+                                    if (_this4.groupByList.length) {
                                         (function () {
 
                                             var aggregateFunctions = {};
                                             returnObject = {};
 
                                             // Pull all aggregate functions into an object for easier access and verification
-                                            if (_this3.functionsList) {
-                                                _this3.functionsList.forEach(function (item) {
+                                            if (_this4.functionsList) {
+                                                _this4.functionsList.forEach(function (item) {
                                                     if (item.aggregate) aggregateFunctions[item.column] = item.aggregate;
                                                 });
                                             }
@@ -497,22 +523,22 @@ var iDB = function () {
                                                     }
                                                 };
 
-                                                checkGroupingAgainstList(_this3.groupByList.slice(0), record, returnObject);
+                                                checkGroupingAgainstList(_this4.groupByList.slice(0), record, returnObject);
                                             });
                                         })();
                                     }
                                 }
 
                                 // Order records, if order was specified and results aren't grouped
-                                if (_this3.orderByList && _this3.orderByList.length && !returnObject) {
+                                if (_this4.orderByList && _this4.orderByList.length && !returnObject) {
 
                                     // Filter out orderBy columns not present in the selected items, if given, and warn user
-                                    if (_this3.selectList && _this3.orderByList.length) {
-                                        _this3.orderByList = _this3.orderByList.filter(function (orderByItem) {
+                                    if (_this4.selectList && _this4.orderByList.length) {
+                                        _this4.orderByList = _this4.orderByList.filter(function (orderByItem) {
 
-                                            var exists = _this3.selectList.includes(orderByItem);
+                                            var exists = _this4.selectList.includes(orderByItem);
 
-                                            if (!exists) console.warn(orderByItem + " not in columns selected (" + _this3.selectList.join(", ") + ")");
+                                            if (!exists) console.warn(orderByItem + " not in columns selected (" + _this4.selectList.join(", ") + ")");
 
                                             return exists;
                                         });
@@ -524,7 +550,7 @@ var iDB = function () {
                                         var _iteratorError = undefined;
 
                                         try {
-                                            for (var _iterator = _this3.orderByList[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
+                                            for (var _iterator = _this4.orderByList[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
                                                 var orderItem = _step.value;
 
                                                 if (a[orderItem] != b[orderItem]) return a[orderItem] < b[orderItem] ? -1 : 1;
@@ -546,8 +572,8 @@ var iDB = function () {
                                     });
                                 }
 
-                                _this3.db.close();
-                                _this3.reset();
+                                _this4.db.close();
+                                _this4.reset();
 
                                 if (hadErrors) reject();else {
                                     if (returnObject) resolve(returnObject);else resolve(Object.keys(returnData).length ? returnData : recordsAffected);
@@ -559,36 +585,36 @@ var iDB = function () {
                                 var cursor = event.target.result;
 
                                 // Skip values if a skip value has been provided
-                                if (_this3.skipValue) {
-                                    var skipValue = _this3.skipValue;
-                                    _this3.skipValue = null;
+                                if (_this4.skipValue) {
+                                    var skipValue = _this4.skipValue;
+                                    _this4.skipValue = null;
                                     cursor.advance(skipValue);
                                 } else {
 
                                     if (cursor) {
 
                                         // Select all data if no specific keys have been requested, otherwise filter others out
-                                        if (!_this3.selectList) {
+                                        if (!_this4.selectList) {
                                             matchAgainstWhereConditions(cursor);
                                         } else {
                                             (function () {
                                                 var filteredItem = {};
                                                 // this.selectList.forEach(item => filteredItem[item.column] = cursor.value[item.column])
-                                                _this3.selectList.forEach(function (item) {
+                                                _this4.selectList.forEach(function (item) {
                                                     return filteredItem[item] = cursor.value[item];
                                                 });
                                                 matchAgainstWhereConditions(cursor, filteredItem);
                                             })();
                                         }
 
-                                        if (!_this3.limitValue || returnData.length < _this3.limitValue) cursor.continue();else finishQuery();
+                                        if (!_this4.limitValue || returnData.length < _this4.limitValue) cursor.continue();else finishQuery();
                                     } else finishQuery();
                                 }
                             };
 
                             iterator.onerror = function (event) {
                                 finishQuery(true);
-                                _this3.throwError("Error selecting data: " + iterator.error);
+                                _this4.throwError("Error selecting data: " + iterator.error);
                             };
                         });
                     }();
@@ -600,25 +626,25 @@ var iDB = function () {
     }, {
         key: "openTransaction",
         value: function openTransaction() {
-            var _this4 = this;
+            var _this5 = this;
 
             return new Promise(function (resolve, reject) {
 
-                if (!_this4.databaseName) _this4.throwError("Cannot start transaction. Database name not provided.");
+                if (!_this5.databaseName) _this5.throwError("Cannot start transaction. Database name not provided.");
 
-                var request = indexedDB.open(_this4.databaseName, _this4.databaseVersion);
+                var request = indexedDB.open(_this5.databaseName, _this5.databaseVersion);
 
                 request.onupgradeneeded = function () {
 
                     var transaction = request.transaction;
-                    _this4.db = request.result;
-                    _this4.newTablesList = _this4.newTablesList || [];
+                    _this5.db = request.result;
+                    _this5.newTablesList = _this5.newTablesList || [];
 
                     // Flush existing table creation data to the newTablesList
-                    if (_this4.newTableData) {
-                        _this4.newTablesList.push({
-                            tableData: _this4.newTableData,
-                            tableColumns: _this4.newTableColumns || []
+                    if (_this5.newTableData) {
+                        _this5.newTablesList.push({
+                            tableData: _this5.newTableData,
+                            tableColumns: _this5.newTableColumns || []
                         });
                     }
 
@@ -627,7 +653,7 @@ var iDB = function () {
                             tableColumns = _ref.tableColumns;
 
 
-                        var objectStore = _this4.db.createObjectStore(tableData.tableName, tableData.options);
+                        var objectStore = _this5.db.createObjectStore(tableData.tableName, tableData.options);
 
                         tableColumns.forEach(function (_ref2) {
                             var name = _ref2.name,
@@ -643,10 +669,10 @@ var iDB = function () {
                         (function () {
 
                             // Get the new and existing table data for updating comparisons 
-                            var existingTableNames = Object.keys(_this4.db.objectStoreNames).map(function (key) {
-                                return _this4.db.objectStoreNames[key];
+                            var existingTableNames = Object.keys(_this5.db.objectStoreNames).map(function (key) {
+                                return _this5.db.objectStoreNames[key];
                             }),
-                                newTableNames = _this4.newTablesList.map(function (table) {
+                                newTableNames = _this5.newTablesList.map(function (table) {
                                 return table.tableData.tableName;
                             });
 
@@ -655,12 +681,12 @@ var iDB = function () {
                                 return !newTableNames.includes(table);
                             });
                             tablesToRemove.forEach(function (table) {
-                                _this4.db.deleteObjectStore(table);
+                                _this5.db.deleteObjectStore(table);
                                 existingTableNames.splice(existingTableNames.indexOf(table), 1);
                             });
 
                             // Then decide which tables are new, and need adding
-                            var tablesToAdd = _this4.newTablesList.filter(function (table) {
+                            var tablesToAdd = _this5.newTablesList.filter(function (table) {
                                 return !existingTableNames.includes(table.tableData.tableName);
                             });
                             tablesToAdd.forEach(addTable);
@@ -675,7 +701,7 @@ var iDB = function () {
                                 });
                                 var newColumns = [];
 
-                                _this4.newTablesList.some(function (newTable) {
+                                _this5.newTablesList.some(function (newTable) {
                                     if (newTable.tableData.tableName == existingTableName) {
                                         newColumns = newTable.tableColumns;
                                         return true;
@@ -707,27 +733,27 @@ var iDB = function () {
                                 });
                             });
                         })();
-                    } else _this4.newTablesList.forEach(addTable);
+                    } else _this5.newTablesList.forEach(addTable);
 
-                    _this4.newTablesList = [];
-                    _this4.newTableData = null;
-                    _this4.newTablesColumns = [];
+                    _this5.newTablesList = [];
+                    _this5.newTableData = null;
+                    _this5.newTablesColumns = [];
                 };
 
                 request.onerror = function () {
-                    _this4.reset();
-                    _this4.throwError("Error opening database " + request.error);
+                    _this5.reset();
+                    _this5.throwError("Error opening database " + request.error);
                 };
 
                 request.onsuccess = function () {
 
-                    if (_this4.table) {
-                        _this4.db = request.result;
-                        _this4.transaction = request.result.transaction(_this4.table, "readwrite");
+                    if (_this5.table) {
+                        _this5.db = request.result;
+                        _this5.transaction = request.result.transaction(_this5.table, "readwrite");
 
-                        _this4.transaction.oncomplete = function () {
-                            _this4.transaction = null;
-                            _this4.db.close();
+                        _this5.transaction.oncomplete = function () {
+                            _this5.transaction = null;
+                            _this5.db.close();
                         };
                     } else request.result.close();
 
@@ -772,7 +798,7 @@ var iDB = function () {
     }, {
         key: "compileListFromArguments",
         value: function compileListFromArguments(args, type) {
-            var _this5 = this;
+            var _this6 = this;
 
             var list = [];
 
@@ -781,8 +807,8 @@ var iDB = function () {
 
                     if (item.some(function (subItem) {
                         return (typeof subItem === "undefined" ? "undefined" : _typeof(subItem)) !== type;
-                    })) _this5.throwError("Arguments must all be " + type + "s");else list = list.concat(item);
-                } else _this5.throwError("Arguments must all be " + type + "s");
+                    })) _this6.throwError("Arguments must all be " + type + "s");else list = list.concat(item);
+                } else _this6.throwError("Arguments must all be " + type + "s");
             });
 
             return list;
@@ -823,6 +849,11 @@ var iDB = function () {
                     explanation: "Select the database to use. This does not get reset after queries, so setting it once should be enough.",
                     parameters: "[0-String] Database name",
                     returns: "iDB"
+                },
+                exists: {
+                    explanation: "Check if a database exists",
+                    parameters: "[0-String] Database name",
+                    returns: "Promise (with Boolean)"
                 }
             });
 
