@@ -261,6 +261,7 @@ Nice and easy.
 | setDatabase | Use at the end of the table creation chain. Takes data for all new tables and creates a new version of the database. An incrementally higher version is needed if updating an existing database of the same name.  | **String** database name **Integer*** version | Promise | 
 |dropDatabase| Drop an existing database from storage |**String** Database name  | Promise |
 | use | Select the database to use. This is not reset after queries, so setting it once should be enough, in most cases. | **String** database name | iDB |
+| exists | Check if a specific database exists | **String** database name | Promise (resolving a boolean) |
 NOTE: Drop table is not implemented because in indexedDB, the only way to update a database's tables is to create a new version of the database, with the new structure.
 
 ### Queries
