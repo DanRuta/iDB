@@ -569,7 +569,7 @@ class iDB {
 
             const request = indexedDB.open(this.databaseName, this.databaseVersion)
 
-            request.onupgradeneeded = () => {
+            request.onupgradeneeded = event => {
 
                 const transaction = request.transaction 
                 this.db = request.result

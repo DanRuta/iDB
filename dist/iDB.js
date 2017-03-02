@@ -634,7 +634,7 @@ var iDB = function () {
 
                 var request = indexedDB.open(_this5.databaseName, _this5.databaseVersion);
 
-                request.onupgradeneeded = function () {
+                request.onupgradeneeded = function (event) {
 
                     var transaction = request.transaction;
                     _this5.db = request.result;
